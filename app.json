@@ -1,30 +1,42 @@
 {
   "expo": {
-    "name": "anihoshi",
-    "slug": "anihoshi",
-    "version": "1.0.0",
+    "name": "AniHoshi",
+    "slug": "AniHoshi",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0A0F1D"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.anonymous.anihoshi",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0A0F1D"
+      }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-dev-client",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0F1D",
+          "image": "./assets/icon.png",
+          "imageWidth": 200
+        }
+      ],
+      "expo-video",
+      "expo-image"
+    ]
   }
 }
