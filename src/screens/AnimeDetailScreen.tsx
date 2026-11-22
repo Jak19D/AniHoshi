@@ -19,6 +19,7 @@ import { getAnimeArtwork, getMalRating } from '../services/animeArtwork';
 import { loadAnimeRating } from '../utils/animeRatings';
 import { getOriginalImageUrl } from '../utils/imageUrl';
 import { getPortugueseAnimeSynopsis } from '../services/animeSynopsisPt';
+import FeedbackToast from '../components/FeedbackToast';
 
 const { width, height } = Dimensions.get('window');
 const SLIME_OFFICIAL_SYNOPSIS = 'Mikami Satoru, funcionário de uma megacorporação, é apunhalado por um assassino nas ruas e renasce num mundo paralelo... Mas ele renasce como um slime! Jogado neste novo mundo com o nome Rimuru, ele assume a missão de criar um mundo que seja acolhedor para todas as raças.';
@@ -89,6 +90,7 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
     }, [anime.id]);
     const [isFavorite, setIsFavorite] = useState(false);
     const [showMoreDetails, setShowMoreDetails] = useState(false);
+    const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
     const genres = anime.title.toLowerCase().includes('slime')
         ? ['Isekai', 'Fantasia', 'Aventura', 'Comédia']
         : (anime.genre || '').split(/[,·|]/).map((genre) => genre.trim()).filter(Boolean);
@@ -126,6 +128,7 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
                 type: 'anime',
             });
             setIsFavorite(next);
+            setFavoriteFeedback(next ? 'Anime adicionado aos favoritos' : 'Anime removido dos favoritos');
         } catch (error: any) {
             if (error?.message === 'NOT_LOGGED_IN') {
                 Alert.alert('Erro', 'Você precisa estar logado para favoritar');
@@ -276,12 +279,13 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
                     <Ionicons name="play" size={20} color={COLORS.background.primary} />
                     <Text style={styles.playButtonText}>Começar a assistir E1</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.favoriteStarButton} onPress={toggleFavorite}>
+                <TouchableOpacity style={[styles.favoriteButton, styles.bottomFavoriteButton]} onPress={toggleFavorite} accessibilityRole="button" accessibilityLabel={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}>
                     <Ionicons
                         name={isFavorite ? 'star' : 'star-outline'}
-                        size={28}
+                        size={20}
                         color={isFavorite ? COLORS.primary : COLORS.text.main}
                     />
+                    <Text style={styles.favoriteButtonText}>{isFavorite ? 'Favoritado' : 'Favoritar'}</Text>
                 </TouchableOpacity>
             </View>
 
@@ -339,6 +343,7 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
                     </View>
                 </View>
             </Modal>
+            <FeedbackToast message={favoriteFeedback} onDismiss={() => setFavoriteFeedback(null)} />
         </View>
     );
 }
@@ -560,9 +565,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginLeft: 8,
     },
-    favoriteStarButton: {
-        padding: 10,
-    },
+    bottomFavoriteButton: { minHeight: 48, paddingHorizontal: 12, marginRight: 0, marginLeft: 8 },
     shareModal: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.9)',

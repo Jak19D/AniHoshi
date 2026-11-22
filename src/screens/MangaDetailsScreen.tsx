@@ -9,6 +9,7 @@ import { loadReadChapters, loadReadingMode, loadReadingProgress, MangaReadingMod
 import { mediaRepository } from '../services/mediaRepository';
 import { getLocalMangaChapters } from '../services/localMangaChapters';
 import { getMangaSynopsis } from '../services/animeArtwork';
+import FeedbackToast from '../components/FeedbackToast';
 import {
     getAnimeKey,
     isAnimeFavorite,
@@ -52,6 +53,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     const [showReadingModes, setShowReadingModes] = useState(false);
     const [synopsis, setSynopsis] = useState(manga.title.toLowerCase().includes('slime') ? SLIME_OFFICIAL_SYNOPSIS : '');
     const [synopsisLoaded, setSynopsisLoaded] = useState(false);
+    const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
 
     useEffect(() => {
         let active = true;
@@ -149,6 +151,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
                 type: 'manga',
             });
             setIsFavorite(newIsFavorite);
+            setFavoriteFeedback(newIsFavorite ? 'Mangá adicionado aos favoritos' : 'Mangá removido dos favoritos');
             setFavoriteKeys((prev) => {
                 const next = new Set(prev);
                 const key = getAnimeKey(manga.title);
@@ -191,12 +194,13 @@ export default function MangaDetailsScreen({ navigation }: Props) {
                     <TouchableOpacity style={styles.favoriteButton} onPress={() => setShowReadingModes(true)} accessibilityRole="button" accessibilityLabel="Escolher modo de leitura">
                         <Ionicons name="book-outline" size={21} color={COLORS.text.main} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.favoriteButton, { marginLeft: 10 }]} onPress={toggleFavorite}>
+                    <TouchableOpacity style={[styles.favoriteButton, styles.favoriteActionButton]} onPress={toggleFavorite} accessibilityRole="button" accessibilityLabel={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}>
                         <Ionicons 
                             name={isFavorite ? "star" : "star-outline"} 
-                            size={24} 
+                            size={20}
                             color={isFavorite ? COLORS.primary : COLORS.text.main} 
                         />
+                        <Text style={styles.favoriteActionText}>{isFavorite ? 'Favoritado' : 'Favoritar'}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -228,7 +232,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     const renderChaptersTab = () => (
         <ScrollView style={styles.tabContent}>
             <View style={styles.chaptersList}>
-                {chapters.length === 0 && <Text style={styles.emptyChapters}>Os capítulos e as páginas serão exibidos aqui quando forem cadastrados no Supabase.</Text>}
+                {chapters.length === 0 && <Text style={styles.emptyChapters}>Os capítulos e as páginas serão exibidos aqui quando estiverem disponíveis.</Text>}
                 {chapters.map((chapter) => {
                     const isRead = readChapterIds.includes(chapter.id);
                     return <TouchableOpacity key={chapter.id} style={styles.chapterItem} onPress={() => openChapter(chapter)}>
@@ -299,6 +303,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
                     </View>
                 </View>
             </Modal>
+            <FeedbackToast message={favoriteFeedback} onDismiss={() => setFavoriteFeedback(null)} />
         </View>
     );
 }
@@ -427,6 +432,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    favoriteActionButton: { width: 'auto', minHeight: 50, flexDirection: 'row', paddingHorizontal: 14, gap: 6 },
+    favoriteActionText: { color: COLORS.text.main, fontSize: 13, fontWeight: '600' },
     statsContainer: {
         flexDirection: 'row',
         marginBottom: 20,

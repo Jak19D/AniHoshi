@@ -50,13 +50,26 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                 return;
             }
 
-            users[userIndex] = {
-                ...users[userIndex],
-                password: SHA256(`${PASSWORD_SALT}:${password}`).toString(),
-            };
-            await AsyncStorage.setItem('users', JSON.stringify(users));
-            Alert.alert('Senha redefinida', 'Sua senha foi alterada. Entre com a nova senha.');
-            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+            Alert.alert('Confirmar alteração', `A senha da conta ${normalizedEmail} será alterada. Deseja continuar?`, [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Alterar senha',
+                    onPress: () => {
+                        void (async () => {
+                            users[userIndex] = {
+                                ...users[userIndex],
+                                password: SHA256(`${PASSWORD_SALT}:${password}`).toString(),
+                            };
+                            await AsyncStorage.setItem('users', JSON.stringify(users));
+                            Alert.alert('Senha redefinida', 'Sua senha foi alterada. Entre com a nova senha.');
+                            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+                        })().catch((error) => {
+                            console.error('Erro ao redefinir senha:', error);
+                            Alert.alert('Erro', 'Não foi possível redefinir sua senha. Tente novamente.');
+                        });
+                    },
+                },
+            ]);
         } catch (error) {
             console.error('Erro ao redefinir senha:', error);
             Alert.alert('Erro', 'Não foi possível redefinir sua senha. Tente novamente.');

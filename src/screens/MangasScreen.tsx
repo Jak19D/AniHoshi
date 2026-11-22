@@ -5,6 +5,7 @@ import { COLORS } from '../theme/colors';
 import { getMangaCover } from '../services/animeArtwork';
 import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MainTabParamList, RootStackParamList } from '../routes/types';
+import FeedbackToast from '../components/FeedbackToast';
 import {
     getAnimeKey,
     isAnimeFavorite,
@@ -58,6 +59,7 @@ export default function MangasScreen({ navigation: tabNavigation }: Props) {
     const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
     const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
     const [mangaCovers, setMangaCovers] = useState<Record<string, string>>({});
+    const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
 
     useEffect(() => {
         let active = true;
@@ -96,6 +98,7 @@ export default function MangasScreen({ navigation: tabNavigation }: Props) {
                 ...manga,
                 type: 'manga',
             });
+            setFavoriteFeedback(isFavorite ? 'Mangá adicionado aos favoritos' : 'Mangá removido dos favoritos');
             setFavoriteKeys((prev) => {
                 const next = new Set(prev);
                 const key = getAnimeKey(manga.title);
@@ -202,6 +205,7 @@ export default function MangasScreen({ navigation: tabNavigation }: Props) {
                     ))}
                 </ScrollView>
             </ScrollView>
+            <FeedbackToast message={favoriteFeedback} onDismiss={() => setFavoriteFeedback(null)} />
         </View>
     );
 }

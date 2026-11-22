@@ -26,7 +26,7 @@ const legacyHashPassword = (password: string) => SHA256(password).toString();
 
 const loginSchema = z.object({
     email: z.string().email('E-mail inválido'),
-    password: z.string().min(6, 'Senha obrigatória'),
+    password: z.string().min(6, 'Use no mínimo 6 caracteres'),
 });
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Login'> };
@@ -34,7 +34,8 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Login'
 export default function LoginScreen({ navigation }: Props) {
     const { control, handleSubmit, watch, formState: { errors, isValid } } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
-        mode: 'onChange',
+        mode: 'onTouched',
+        reValidateMode: 'onChange',
         defaultValues: { email: '', password: '' },
     });
     const email = watch('email');
@@ -114,6 +115,7 @@ export default function LoginScreen({ navigation }: Props) {
                     <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color={COLORS.text.muted} />
                 </TouchableOpacity>
             </View>
+            <Text style={styles.passwordHint}>A senha deve ter no mínimo 6 caracteres.</Text>
             {errors.password && <Text style={styles.error}>{String(errors.password.message)}</Text>}
 
             <TouchableOpacity disabled={!isValid} style={[styles.button, !isValid && styles.buttonDisabled]} onPress={handleSubmit(handleLogin)}>
@@ -216,5 +218,6 @@ const styles = StyleSheet.create({
         marginBottom: 10,
         marginLeft: 5,
         fontSize: 12
-    }
+    },
+    passwordHint: { color: COLORS.text.muted, fontSize: 12, marginLeft: 5, marginBottom: 8 },
 });

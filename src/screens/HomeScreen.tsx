@@ -15,6 +15,7 @@ import {
 import { getAnimeArtwork, getMalRating } from '../services/animeArtwork';
 import { getOriginalImageUrl } from '../utils/imageUrl';
 import { getPortugueseAnimeSynopsis } from '../services/animeSynopsisPt';
+import FeedbackToast from '../components/FeedbackToast';
 
 const { width } = Dimensions.get('window');
 const SLIME_OFFICIAL_SYNOPSIS = 'Mikami Satoru, funcionário de uma megacorporação, é apunhalado por um assassino nas ruas e renasce num mundo paralelo... Mas ele renasce como um slime! Jogado neste novo mundo com o nome Rimuru, ele assume a missão de criar um mundo que seja acolhedor para todas as raças.';
@@ -88,6 +89,7 @@ export default function HomeScreen({ navigation: tabNavigation }: Props) {
     const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
     const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
     const [heroDescriptions, setHeroDescriptions] = useState<Record<string, string>>({});
+    const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
 
     useEffect(() => {
         let active = true;
@@ -125,6 +127,7 @@ export default function HomeScreen({ navigation: tabNavigation }: Props) {
                 ...anime,
                 type: 'anime',
             });
+            setFavoriteFeedback(isFavorite ? 'Anime adicionado aos favoritos' : 'Anime removido dos favoritos');
             setFavoriteKeys((prev) => {
                 const next = new Set(prev);
                 const key = getAnimeKey(anime.title);
@@ -330,6 +333,7 @@ export default function HomeScreen({ navigation: tabNavigation }: Props) {
                     ))}
                 </ScrollView>
             </ScrollView>
+            <FeedbackToast message={favoriteFeedback} onDismiss={() => setFavoriteFeedback(null)} />
         </View>
     );
 }
@@ -360,9 +364,9 @@ const styles = StyleSheet.create({
         position: 'relative',
         marginTop: 0,
     },
-    heroImage: { width: width, height: 600 },
+    heroImage: { width: width, height: 430 },
     heroBackdrop: { position: 'absolute', width, height: 600, opacity: 0.38 },
-    heroBackdropShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10, 15, 29, 0.26)' },
+    heroBackdropShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(10, 15, 29, 0.26)' },
     posterGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '48%', borderRadius: 8 },
     heroGradient: {
         position: 'absolute',

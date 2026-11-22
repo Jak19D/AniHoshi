@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ScrollView, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MainTabParamList, RootStackParamList } from '../routes/types';
 import { COLORS } from '../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { deleteLocalAccountData } from '../utils/accountData';
 
 type User = {
     email: string;
@@ -23,6 +24,9 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
     const [isEditingName, setIsEditingName] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [coverImage, setCoverImage] = useState<string | null>(null);
+    const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+    const [deleteEmailConfirmation, setDeleteEmailConfirmation] = useState('');
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
     const syncTabAvatar = (imageUri: string) => {
         tabNavigation?.setOptions({
@@ -89,6 +93,26 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
             });
         } catch (error) {
             console.error('Erro ao fazer logout:', error);
+        }
+    };
+
+    const confirmLogout = () => Alert.alert('Sair da conta', 'Deseja realmente sair?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sair', style: 'destructive', onPress: () => { void handleLogout(); } },
+    ]);
+
+    const handleDeleteAccount = async () => {
+        if (!email || deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase()) return;
+        setIsDeletingAccount(true);
+        try {
+            await deleteLocalAccountData(email);
+            setShowDeleteAccount(false);
+            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        } catch (error) {
+            console.error('Erro ao excluir conta:', error);
+            Alert.alert('Não foi possível excluir a conta', 'Tente novamente. Seus dados não foram removidos por completo.');
+        } finally {
+            setIsDeletingAccount(false);
         }
     };
 
@@ -297,22 +321,51 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
                     <TextInput accessibilityLabel="Senha da conta, protegida" style={styles.passwordInput} value="••••••••" editable={false} secureTextEntry />
                 </View>
 
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Abrir Design System"
-                    style={styles.actionButton}
-                    onPress={() => navigation.navigate('DesignSystem')}
-                >
-                    <Ionicons name="color-palette-outline" size={20} color={COLORS.text.main} />
-                    <Text style={styles.actionText}>Design System</Text>
-                    <Ionicons name="chevron-forward" size={18} color={COLORS.text.muted} style={styles.actionChevron} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Sair da conta" style={styles.actionButton} onPress={confirmLogout}>
                     <Ionicons name="log-out" size={20} color={COLORS.text.main}/>
                     <Text style={styles.actionText}>Sair</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Excluir conta" style={styles.actionButton} onPress={() => { setDeleteEmailConfirmation(''); setShowDeleteAccount(true); }}>
+                    <Ionicons name="trash-outline" size={20} color={COLORS.text.main}/>
+                    <Text style={styles.actionText}>Excluir conta</Text>
+                </TouchableOpacity>
             </View>
+
+            <Modal visible={showDeleteAccount} transparent animationType="fade" onRequestClose={() => setShowDeleteAccount(false)}>
+                <KeyboardAvoidingView style={styles.deleteBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                    <View style={styles.deleteDialog}>
+                        <Ionicons name="warning-outline" size={30} color={COLORS.error} />
+                        <Text style={styles.deleteTitle}>Excluir conta?</Text>
+                        <Text style={styles.deleteDescription}>Esta ação é permanente. Seus dados locais, favoritos e progresso de leitura serão apagados. Digite seu e-mail para confirmar.</Text>
+                        <TextInput
+                            accessibilityLabel="Digite seu e-mail para confirmar a exclusão"
+                            style={styles.deleteInput}
+                            value={deleteEmailConfirmation}
+                            onChangeText={setDeleteEmailConfirmation}
+                            placeholder={email}
+                            placeholderTextColor={COLORS.text.muted}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            editable={!isDeletingAccount}
+                        />
+                        <View style={styles.deleteActions}>
+                            <TouchableOpacity style={styles.deleteCancel} onPress={() => setShowDeleteAccount(false)} disabled={isDeletingAccount}>
+                                <Text style={styles.deleteCancelText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Confirmar exclusão permanente da conta"
+                                style={[styles.deleteConfirm, (deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || isDeletingAccount) && styles.deleteConfirmDisabled]}
+                                onPress={() => { void handleDeleteAccount(); }}
+                                disabled={deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || isDeletingAccount}
+                            >
+                                <Text style={styles.deleteConfirmText}>{isDeletingAccount ? 'Excluindo…' : 'Excluir conta'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </ScrollView>
     );
 }
@@ -363,5 +416,16 @@ const styles = StyleSheet.create({
     passwordInput: { flex: 1, color: COLORS.text.main, padding: 15 },
     actionButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface.secondary, padding: 15, borderRadius: 8, marginBottom: 10 },
     actionChevron: { marginLeft: 'auto' },
-    actionText: { color: COLORS.text.main, marginLeft: 10, fontSize: 16 }
+    actionText: { color: COLORS.text.main, marginLeft: 10, fontSize: 16 },
+    deleteBackdrop: { flex: 1, justifyContent: 'center', padding: 22, backgroundColor: 'rgba(0,0,0,0.72)' },
+    deleteDialog: { alignItems: 'center', backgroundColor: COLORS.background.secondary, borderWidth: 1, borderColor: COLORS.surface.primary, borderRadius: 18, padding: 22 },
+    deleteTitle: { color: COLORS.text.main, fontSize: 21, fontWeight: 'bold', marginTop: 10 },
+    deleteDescription: { color: COLORS.text.muted, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 10 },
+    deleteInput: { width: '100%', backgroundColor: COLORS.surface.primary, color: COLORS.text.main, padding: 14, borderRadius: 10, marginTop: 18 },
+    deleteActions: { width: '100%', flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
+    deleteCancel: { minHeight: 46, justifyContent: 'center', paddingHorizontal: 12 },
+    deleteCancelText: { color: COLORS.text.main, fontWeight: '600' },
+    deleteConfirm: { minHeight: 46, justifyContent: 'center', paddingHorizontal: 15, borderRadius: 10, backgroundColor: COLORS.danger },
+    deleteConfirmDisabled: { opacity: 0.45 },
+    deleteConfirmText: { color: COLORS.text.main, fontWeight: 'bold' },
 });

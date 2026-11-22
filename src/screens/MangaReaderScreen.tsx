@@ -108,8 +108,8 @@ export default function MangaReaderScreen({ route, navigation }: Props) {
                 ) : (
                     <View style={styles.readerMessage}>
                         {loading ? <ActivityIndicator color={COLORS.primary} /> : <Ionicons name="book-outline" size={52} color={COLORS.primary} />}
-                        <Text style={styles.readerMessageTitle}>{loading ? 'Carregando capítulo…' : pdfError ? 'Não foi possível carregar o capítulo' : 'Capítulo ainda não publicado'}</Text>
-                        <Text style={styles.readerMessageText}>{pdfError ? 'O PDF não abriu no leitor integrado.' : 'O catálogo já aceita PDF ou páginas por capítulo. Quando o arquivo for vinculado, ele aparecerá aqui.'}</Text>
+                        <Text style={styles.readerMessageTitle}>{loading ? 'Carregando capítulo…' : 'Capítulo indisponível no momento'}</Text>
+                        <Text style={styles.readerMessageText}>{pdfError ? 'Não foi possível abrir este capítulo agora. Tente novamente mais tarde.' : 'Este capítulo ainda não está disponível. Volte em outro momento.'}</Text>
                         {!!pdfUrl && pdfError && <TouchableOpacity style={styles.openExternal} onPress={() => Linking.openURL(pdfUrl)}><Text style={styles.openExternalText}>Abrir PDF no navegador</Text></TouchableOpacity>}
                     </View>
                 )}

@@ -44,8 +44,8 @@ export default function AnimePlayerScreen({ route, navigation }: Props) {
 
     useEffect(() => {
         if (!videoUrl) return;
-        const subscription = player.addListener('statusChange', ({ status, error }) => {
-            if (status === 'error') setPlayerError(error?.message ?? 'Falha ao reproduzir este vídeo.');
+        const subscription = player.addListener('statusChange', ({ status }) => {
+            if (status === 'error') setPlayerError('Episódio indisponível no momento. Tente novamente mais tarde.');
         });
         return () => subscription.remove();
     }, [player, videoUrl]);
@@ -73,13 +73,13 @@ export default function AnimePlayerScreen({ route, navigation }: Props) {
             </View>
 
             <View style={styles.videoContainer}>
-                {videoUrl ? (
+                {videoUrl && !playerError ? (
                     <VideoView player={player} style={styles.video} nativeControls contentFit="contain" />
                 ) : (
                     <View style={styles.emptyVideo}>
                         {loading ? <ActivityIndicator size="large" color={COLORS.primary} /> : <Ionicons name="play-circle-outline" size={64} color={COLORS.primary} />}
-                        <Text style={styles.emptyVideoTitle}>{loading ? 'Carregando episódio…' : 'Episódio ainda não cadastrado'}</Text>
-                        <Text style={styles.emptyVideoText}>{playerError ?? 'A tela está pronta. O endereço do vídeo será vinculado ao catálogo de mídia quando houver um arquivo configurado.'}</Text>
+                        <Text style={styles.emptyVideoTitle}>{loading ? 'Carregando episódio…' : 'Episódio indisponível no momento'}</Text>
+                        <Text style={styles.emptyVideoText}>{playerError ?? 'Este episódio não está disponível agora. Tente novamente mais tarde.'}</Text>
                     </View>
                 )}
             </View>

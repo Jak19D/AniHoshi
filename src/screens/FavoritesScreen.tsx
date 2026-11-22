@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colors';
 import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, MainTabParamList } from '../routes/types';
+import FeedbackToast from '../components/FeedbackToast';
 import {
     FavoriteAnime,
     loadFavoriteAnimeList,
@@ -18,6 +19,7 @@ type Props = {
 export default function FavoritesScreen({ navigation: tabNavigation }: Props) {
     const navigation = useNavigation<NavigationProp<RootStackParamList>>();
     const [favorites, setFavorites] = useState<FavoriteAnime[]>([]);
+    const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'Animes' | 'Mangás'>('Animes');
 
     const loadFavorites = useCallback(async () => {
@@ -39,6 +41,7 @@ export default function FavoritesScreen({ navigation: tabNavigation }: Props) {
         try {
             const { favorites: updated } = await toggleFavoriteAnime(anime);
             setFavorites(updated);
+            setFavoriteFeedback(`${anime.type === 'manga' ? 'Mangá' : 'Anime'} removido dos favoritos`);
         } catch (error: any) {
             if (error?.message === 'NOT_LOGGED_IN') {
                 Alert.alert('Erro', 'Você precisa estar logado para gerenciar favoritos');
@@ -139,6 +142,7 @@ export default function FavoritesScreen({ navigation: tabNavigation }: Props) {
                     extraData={favorites}
                 />
             )}
+            <FeedbackToast message={favoriteFeedback} onDismiss={() => setFavoriteFeedback(null)} />
         </View>
     );
 }

@@ -4,7 +4,7 @@ export const COLORS = {
     primary: '#FBC02D',
     primaryHover: '#FFC107',
     accent: '#00BCD4',
-    error: '#FF5252',
+    error: '#FF8A80',
     danger: '#E53935',
     success: '#FBC02D',
     successHover: '#FFC107',
