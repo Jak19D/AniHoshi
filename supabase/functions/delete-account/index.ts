@@ -82,35 +82,43 @@ Deno.serve(async (request: Request) => {
         return json(400, { error: 'recent_password_confirmation_required' });
     }
 
-    // Re-authenticate the same account before making an irreversible deletion.
-    const reauthClient = createClient(supabaseUrl, publishableKey, {
+    const passwordClient = createClient(supabaseUrl, publishableKey, {
         auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data: reauthData, error: reauthError } = await reauthClient.auth.signInWithPassword({
+    const { data: passwordData, error: passwordError } = await passwordClient.auth.signInWithPassword({
         email: user.email,
         password,
     });
-    if (reauthError || reauthData.user?.id !== user.id) return json(403, { error: 'reauthentication_failed' });
+    if (passwordError || passwordData.user?.id !== user.id) {
+        return json(403, { error: 'reauthentication_failed' });
+    }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
         auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    const bucket = 'profile-images';
+    let paths: string[];
     try {
-        // Storage objects do not cascade with auth.users. Delete only this user's
-        // own prefix and only from the private profile bucket.
-        const bucket = 'profile-images';
-        const paths = await listAllObjectPaths(admin, bucket, user.id);
-        for (let index = 0; index < paths.length; index += 100) {
-            const { error } = await admin.storage.from(bucket).remove(paths.slice(index, index + 100));
-            if (error) throw error;
-        }
-
-        const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
-        if (deleteError) throw deleteError;
-        return json(200, { deleted: true });
+        paths = await listAllObjectPaths(admin, bucket, user.id);
     } catch (error) {
-        console.error('delete-account failed', error);
+        console.error('delete-account failed listing profile objects', error);
         return json(500, { error: 'account_deletion_failed' });
     }
+
+    for (let index = 0; index < paths.length; index += 100) {
+        const { error } = await admin.storage.from(bucket).remove(paths.slice(index, index + 100));
+        if (error) {
+            console.error('delete-account failed removing profile objects', error);
+            return json(500, { error: 'account_deletion_failed' });
+        }
+    }
+
+    const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+    if (deleteError) {
+        console.error('delete-account failed deleting auth user', deleteError);
+        return json(500, { error: 'account_deletion_failed' });
+    }
+
+    return json(200, { deleted: true });
 });

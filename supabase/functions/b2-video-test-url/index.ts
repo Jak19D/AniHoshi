@@ -38,8 +38,6 @@ Deno.serve(async (request: Request) => {
     const bearer = request.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
     if (!bearer) return json(401, { error: 'unauthorized' });
 
-    // verify_jwt is also enabled in config.toml. Resolve the user again so this
-    // endpoint only issues a playback link to a valid Supabase session.
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const publishableKey = getPublishableKey();
     if (!supabaseUrl || !publishableKey) {
@@ -82,7 +80,6 @@ Deno.serve(async (request: Request) => {
             object: B2_OBJECT_KEY,
         });
     } catch (error) {
-        // Do not log the signed URL or credential-bearing SDK request details.
         console.error('B2 test URL signing failed', error instanceof Error ? error.name : 'unknown_error');
         return json(502, { error: 'b2_signing_failed' });
     }

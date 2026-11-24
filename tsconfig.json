@@ -3,5 +3,9 @@
   "compilerOptions": {
     "strict": true
   },
-  "exclude": ["supabase/functions"]
+  "exclude": [
+    "node_modules",
+    "supabase/functions",
+    "supabase/.temp"
+  ]
 }
