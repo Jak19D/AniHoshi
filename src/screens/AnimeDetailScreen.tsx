@@ -17,7 +17,6 @@ import { mediaRepository } from '../services/mediaRepository';
 import { getLocalAnimeSeasons } from '../services/localAnimeSeasons';
 import { getAnimeArtwork, getMalRating } from '../services/animeArtwork';
 import { loadAnimeRating } from '../utils/animeRatings';
-import { getOriginalImageUrl } from '../utils/imageUrl';
 import { getPortugueseAnimeSynopsis } from '../services/animeSynopsisPt';
 import FeedbackToast from '../components/FeedbackToast';
 
@@ -35,17 +34,19 @@ type Props = {
 function buildSeasons(anime: RootStackParamList['AnimeDetail']['anime'], catalogEpisodes: Episode[]): Season[] {
     const local = anime.seasons?.length ? anime.seasons : getLocalAnimeSeasons(anime.title, anime.episodes);
     if (!catalogEpisodes.length) return local;
-    if (!local.length) return [{ id: 'catalog', name: 'Temporada 1', episodes: catalogEpisodes }];
+    const grouped = new Map<number, Episode[]>();
+    for (const episode of catalogEpisodes) {
+        const seasonNumber = episode.seasonNumber ?? 1;
+        grouped.set(seasonNumber, [...(grouped.get(seasonNumber) ?? []), episode]);
+    }
 
-    let cursor = 0;
-    return local.map((season, index) => {
-        const count = season.episodes.length;
-        const isLast = index === local.length - 1;
-        const slice = isLast ? catalogEpisodes.slice(cursor) : catalogEpisodes.slice(cursor, cursor + count);
-        cursor += count;
+    return [...grouped.entries()].sort(([a], [b]) => a - b).map(([seasonNumber, episodes], index) => {
+        const localSeason = local.length === grouped.size ? local[index] : undefined;
         return {
-            ...season,
-            episodes: slice.length ? slice : season.episodes,
+            id: localSeason?.id ?? `catalog-season-${seasonNumber}`,
+            name: localSeason?.name ?? `Temporada ${seasonNumber}`,
+            seasonNumber,
+            episodes,
         };
     });
 }
@@ -54,6 +55,7 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
     const { anime, selectedSeasonId: routeSeasonId } = route.params;
     const insets = useSafeAreaInsets();
     const [catalogEpisodes, setCatalogEpisodes] = useState<Episode[]>([]);
+    const [catalogArtwork, setCatalogArtwork] = useState<{ cover: string | null; banner: string | null }>({ cover: anime.image, banner: anime.bannerImage ?? anime.image });
     const [malRating, setMalRating] = useState<{ score: number; count: number } | null>(null);
     const localSynopsis = getPortugueseAnimeSynopsis(anime.title) || anime.description || (anime.title.toLowerCase().includes('slime') ? SLIME_OFFICIAL_SYNOPSIS : '');
     const [synopsis, setSynopsis] = useState(localSynopsis);
@@ -83,11 +85,19 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
 
     useEffect(() => {
         let active = true;
-        mediaRepository.getAnimeEpisodes(anime.id).then((items) => {
+        mediaRepository.getAnimeEpisodes(anime.id, anime.title).then((items) => {
             if (active) setCatalogEpisodes(items);
         }).catch((error) => console.error('Erro ao carregar episódios:', error));
         return () => { active = false; };
     }, [anime.id]);
+
+    useEffect(() => {
+        let active = true;
+        mediaRepository.getAnimeAssets(anime.id, anime).then((assets) => {
+            if (active) setCatalogArtwork(assets);
+        }).catch((error) => console.warn('Não foi possível carregar as imagens privadas do anime:', error));
+        return () => { active = false; };
+    }, [anime]);
     const [isFavorite, setIsFavorite] = useState(false);
     const [showMoreDetails, setShowMoreDetails] = useState(false);
     const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
@@ -183,7 +193,7 @@ export default function AnimeDetailScreen({ route, navigation }: Props) {
         <View style={styles.container}>
             <ScrollView style={styles.scrollView}>
                 <View style={styles.imageContainer}>
-                    <Image source={{ uri: getOriginalImageUrl(anime.bannerImage || anime.image) }} style={styles.animeImage} contentFit="contain" contentPosition="center" cachePolicy="memory-disk" />
+                    <Image source={{ uri: catalogArtwork.banner ?? undefined }} style={styles.animeImage} contentFit="contain" contentPosition="center" cachePolicy="memory-disk" />
                     <LinearGradient colors={['transparent', 'rgba(10, 15, 29, 0.72)', COLORS.background.primary]} locations={[0, 0.62, 1]} style={styles.imageGradient} pointerEvents="none" />
                     <TouchableOpacity
                         style={[styles.backButton, { top: Math.max(insets.top, 12) + 8 }]}

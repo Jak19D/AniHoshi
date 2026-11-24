@@ -1,24 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../routes/types';
 import { COLORS } from '../theme/colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import SHA256 from 'crypto-js/sha256';
 import { Ionicons } from '@expo/vector-icons';
+import { getAuthErrorMessage, registerWithEmail } from '../services/authService';
+import LegalConsent from '../components/LegalConsent';
 
 type RegisterFormData = {
     email: string;
     password: string;
     confirmPassword: string;
-};
-
-type User = {
-    email: string;
-    password: string;
 };
 
 const registerSchema = z.object({
@@ -40,41 +35,29 @@ export default function RegisterScreen({ navigation }: Props) {
     });
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [legalAccepted, setLegalAccepted] = useState(false);
 
     const handleRegister = async (data: RegisterFormData) => {
+        setIsSubmitting(true);
         try {
-            const existingUsers = await AsyncStorage.getItem('users');
-            let users: User[] = [];
-            if (existingUsers) {
-                try {
-                    users = JSON.parse(existingUsers);
-                } catch (parseError) {
-                    console.error('Erro ao fazer parse dos usuários:', parseError);
-                    users = [];
-                }
+            const { session } = await registerWithEmail(data.email, data.password);
+            if (session) {
+                Alert.alert('Conta criada', 'Sua conta foi criada com sucesso.');
+                navigation.replace('SplashLogin');
+            } else {
+                Alert.alert('Confirme seu e-mail', 'Enviamos um link de confirmação. Confirme seu e-mail para entrar.');
+                navigation.goBack();
             }
-
-            const emailExists = users.some((user: User) => user.email === data.email.toLowerCase());
-            if (emailExists) {
-                Alert.alert('Erro', 'E-mail já cadastrado');
-                return;
-            }
-
-            const emailToSave = data.email.toLowerCase();
-            const PASSWORD_SALT = 'anihoshi.local.v1';
-            const hashedPassword = SHA256(`${PASSWORD_SALT}:${data.password}`).toString();
-            users.push({ email: emailToSave, password: hashedPassword });
-            await AsyncStorage.setItem('users', JSON.stringify(users));
-            Alert.alert('Sucesso', 'Conta criada com sucesso!');
-            navigation.goBack();
         } catch (error) {
-            console.error('Erro ao criar conta:', error);
-            Alert.alert('Erro', 'Não foi possível criar a conta. Verifique os dados e tente novamente.');
+            Alert.alert('Não foi possível criar a conta', getAuthErrorMessage(error));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
-        <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
             <Image source={require('../../assets/logo2.png')} style={styles.logo} resizeMode="contain" />
             <View style={styles.appNameContainer}>
                 <Text style={styles.appNameAni}>Ani</Text>
@@ -129,19 +112,21 @@ export default function RegisterScreen({ navigation }: Props) {
             </View>
             {errors.confirmPassword && <Text style={styles.error}>{String(errors.confirmPassword.message)}</Text>}
 
-            <TouchableOpacity disabled={!isValid} style={[styles.button, !isValid && styles.buttonDisabled]} onPress={handleSubmit(handleRegister)}>
-                <Text style={styles.buttonText}>Cadastrar</Text>
+            <LegalConsent accepted={legalAccepted} onAcceptedChange={setLegalAccepted} />
+
+            <TouchableOpacity disabled={!isValid || !legalAccepted || isSubmitting} style={[styles.button, (!isValid || !legalAccepted || isSubmitting) && styles.buttonDisabled]} onPress={handleSubmit(handleRegister)}>
+                <Text style={styles.buttonText}>{isSubmitting ? 'Criando conta...' : 'Cadastrar'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => navigation.goBack()}>
                 <Text style={styles.link}>Voltar para o Login</Text>
             </TouchableOpacity>
-        </View>
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background.primary, padding: 20, justifyContent: 'center' },
+    container: { flexGrow: 1, backgroundColor: COLORS.background.primary, padding: 20, justifyContent: 'center' },
     logo: { width: 280, height: 90, alignSelf: 'center', marginBottom: 10 },
     appNameContainer: {
         flexDirection: 'row',

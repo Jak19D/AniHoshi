@@ -8,9 +8,15 @@ export type AnimeArtwork = {
 const cache = new Map<string, AnimeArtwork>();
 const mangaCoverCache = new Map<string, string | null>();
 const malFullCache = new Map<string, Promise<any | null>>();
+const ANIME_SEARCH_TITLES: Record<string, string> = {
+    'demon slayer': 'Kimetsu no Yaiba',
+    'kimetsu no yaiba': 'Kimetsu no Yaiba',
+};
 
 export async function getAnimeArtwork(title: string): Promise<AnimeArtwork | null> {
-    const key = title.trim().toLowerCase();
+    const normalizedTitle = title.trim().toLowerCase();
+    const searchTitle = ANIME_SEARCH_TITLES[normalizedTitle] ?? title;
+    const key = searchTitle.trim().toLowerCase();
     if (cache.has(key)) return cache.get(key)!;
 
     try {
@@ -19,7 +25,7 @@ export async function getAnimeArtwork(title: string): Promise<AnimeArtwork | nul
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({
                 query: `query ($search: String) { Media(search: $search, type: ANIME) { title { romaji english } description(asHtml: false) bannerImage coverImage { extraLarge large } idMal } }`,
-                variables: { search: title },
+                variables: { search: searchTitle },
             }),
         });
         if (!response.ok) return null;

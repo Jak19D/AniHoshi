@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal } from 'react-native';
+import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../theme/colors';
-import { NavigationProp, useNavigation, useRoute } from '@react-navigation/native';
+import { NavigationProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { MangaChapter, RootStackParamList } from '../routes/types';
 import { loadReadChapters, loadReadingMode, loadReadingProgress, MangaReadingMode, saveReadingMode } from '../utils/readingProgress';
 import { mediaRepository } from '../services/mediaRepository';
@@ -11,7 +11,7 @@ import { getLocalMangaChapters } from '../services/localMangaChapters';
 import { getMangaSynopsis } from '../services/animeArtwork';
 import FeedbackToast from '../components/FeedbackToast';
 import {
-    getAnimeKey,
+    getFavoriteKey,
     isAnimeFavorite,
     loadFavoriteKeys,
     toggleFavoriteAnime,
@@ -54,6 +54,15 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     const [synopsis, setSynopsis] = useState(manga.title.toLowerCase().includes('slime') ? SLIME_OFFICIAL_SYNOPSIS : '');
     const [synopsisLoaded, setSynopsisLoaded] = useState(false);
     const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
+    const [coverImage, setCoverImage] = useState(manga.image);
+
+    useEffect(() => {
+        let active = true;
+        mediaRepository.getMangaAssets(manga.id, manga.image).then(({ cover }) => {
+            if (active && cover) setCoverImage(cover);
+        }).catch((error) => console.warn('Não foi possível carregar a capa privada do mangá:', error));
+        return () => { active = false; };
+    }, [manga.id, manga.image]);
 
     useEffect(() => {
         let active = true;
@@ -72,25 +81,40 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     const [chapters, setChapters] = useState<MangaChapter[]>(
         () => (suppliedChapters?.length ? suppliedChapters : localChapters),
     );
+    const [chaptersLoading, setChaptersLoading] = useState(!suppliedChapters?.length);
+    const [chaptersError, setChaptersError] = useState<string | null>(null);
 
     useEffect(() => {
         let active = true;
         if (suppliedChapters?.length) {
             setChapters(suppliedChapters);
+            setChaptersLoading(false);
+            setChaptersError(null);
             return () => { active = false; };
         }
-        setChapters(localChapters);
-        mediaRepository.getMangaChapters(manga.id).then((catalog) => {
-            if (active && catalog.length) setChapters(catalog);
-        }).catch((error) => console.error('Erro ao carregar capítulos:', error));
+        setChaptersLoading(true);
+        setChaptersError(null);
+        mediaRepository.getMangaChapters(manga.id, manga.title).then((catalog) => {
+            if (active) setChapters(catalog);
+        }).catch((error) => {
+            console.error('Erro ao carregar capítulos:', error);
+            if (active) {
+                setChapters([]);
+                setChaptersError(error instanceof Error && error.message === 'AUTH_SESSION_MISSING'
+                    ? 'Faça login no app para carregar os capítulos.'
+                    : 'Não foi possível consultar os capítulos. Confira sua conexão e tente novamente.');
+            }
+        }).finally(() => {
+            if (active) setChaptersLoading(false);
+        });
         return () => { active = false; };
-    }, [localChapters, manga.id, suppliedChapters]);
+    }, [localChapters, manga.id, manga.title, suppliedChapters]);
 
     const refreshFavorites = useCallback(async () => {
         try {
             const keys = await loadFavoriteKeys();
             setFavoriteKeys(keys);
-            setIsFavorite(isAnimeFavorite(keys, manga.title));
+            setIsFavorite(isAnimeFavorite(keys, manga.title, 'manga'));
         } catch (error) {
             console.error('Erro ao carregar favoritos:', error);
             setFavoriteKeys(new Set());
@@ -101,7 +125,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
         refreshFavorites();
     }, [refreshFavorites]);
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         let active = true;
         Promise.all([loadReadChapters(manga.title), loadReadingProgress(manga.title), loadReadingMode(manga.title)]).then(([read, progress, preferredMode]) => {
             if (!active) return;
@@ -112,13 +136,14 @@ export default function MangaDetailsScreen({ navigation }: Props) {
             }
         }).catch((error) => console.error('Erro ao carregar progresso de leitura:', error));
         return () => { active = false; };
-    }, [manga.title]);
+    }, [manga.title]));
 
     const openChapter = (chapter: MangaChapter) => {
         navigation?.navigate('MangaReader', { mangaTitle: manga.title, chapter, chapters });
     };
 
     const handleRead = async () => {
+        if (chaptersLoading || chaptersError || chapters.length === 0) { setActiveTab('chapters'); return; }
         const progress = await loadReadingProgress(manga.title);
         const resumeChapter = progress && chapters.find((chapter) => chapter.id === progress.chapterId);
         const firstChapter = chapters.find((chapter) => chapter.number === 0)
@@ -130,6 +155,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     };
 
     const handleReadButton = () => {
+        if (chaptersLoading || chaptersError || chapters.length === 0) { setActiveTab('chapters'); return; }
         if (!hasReadingPreference) {
             setShowReadingModes(true);
             return;
@@ -154,7 +180,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
             setFavoriteFeedback(newIsFavorite ? 'Mangá adicionado aos favoritos' : 'Mangá removido dos favoritos');
             setFavoriteKeys((prev) => {
                 const next = new Set(prev);
-                const key = getAnimeKey(manga.title);
+                const key = getFavoriteKey(manga.title, 'manga');
                 if (newIsFavorite) next.add(key);
                 else next.delete(key);
                 return next;
@@ -175,7 +201,7 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     const renderDetailsTab = () => (
         <ScrollView style={styles.tabContent}>
             <View style={styles.coverContainer}>
-                <Image source={{ uri: manga.image }} style={styles.coverImage} />
+                <Image source={{ uri: coverImage }} style={styles.coverImage} />
                 <LinearGradient
                     colors={['transparent', 'rgba(10, 15, 29, 0.8)', 'rgba(10, 15, 29, 1)']}
                     style={styles.coverGradient}
@@ -232,8 +258,10 @@ export default function MangaDetailsScreen({ navigation }: Props) {
     const renderChaptersTab = () => (
         <ScrollView style={styles.tabContent}>
             <View style={styles.chaptersList}>
-                {chapters.length === 0 && <Text style={styles.emptyChapters}>Os capítulos e as páginas serão exibidos aqui quando estiverem disponíveis.</Text>}
-                {chapters.map((chapter) => {
+                {chaptersLoading && <View style={styles.chapterStatus}><ActivityIndicator color={COLORS.primary} /><Text style={styles.emptyChapters}>Carregando capítulos…</Text></View>}
+                {!chaptersLoading && chaptersError && <Text style={styles.emptyChapters}>{chaptersError}</Text>}
+                {!chaptersLoading && !chaptersError && chapters.length === 0 && <Text style={styles.emptyChapters}>Nenhum capítulo cadastrado para este mangá ainda.</Text>}
+                {!chaptersLoading && !chaptersError && chapters.map((chapter) => {
                     const isRead = readChapterIds.includes(chapter.id);
                     return <TouchableOpacity key={chapter.id} style={styles.chapterItem} onPress={() => openChapter(chapter)}>
                         <View style={styles.chapterInfo}>
@@ -483,6 +511,7 @@ const styles = StyleSheet.create({
     chaptersList: {
         padding: 15,
     },
+    chapterStatus: { alignItems: 'center', paddingVertical: 24, gap: 10 },
     emptyChapters: { color: COLORS.text.muted, fontSize: 14, lineHeight: 21, padding: 16, textAlign: 'center' },
     chapterItem: {
         flexDirection: 'row',

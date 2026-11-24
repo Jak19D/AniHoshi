@@ -6,12 +6,7 @@ import { MainTabParamList, RootStackParamList } from '../routes/types';
 import { COLORS } from '../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { deleteLocalAccountData } from '../utils/accountData';
-
-type User = {
-    email: string;
-    password: string;
-};
+import { deleteAuthenticatedAccount, getPersistedSession, signOut } from '../services/authService';
 
 type Props = {
     navigation?: NavigationProp<MainTabParamList>;
@@ -26,6 +21,7 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
     const [coverImage, setCoverImage] = useState<string | null>(null);
     const [showDeleteAccount, setShowDeleteAccount] = useState(false);
     const [deleteEmailConfirmation, setDeleteEmailConfirmation] = useState('');
+    const [deletePasswordConfirmation, setDeletePasswordConfirmation] = useState('');
     const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
     const syncTabAvatar = (imageUri: string) => {
@@ -59,14 +55,8 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
                     await AsyncStorage.removeItem(`profileImage_${currentUserEmail}`);
                     await AsyncStorage.setItem(avatarRestoreKey, 'true');
                 }
-                const existingUsers = await AsyncStorage.getItem('users');
-                if (existingUsers) {
-                    const users: User[] = JSON.parse(existingUsers);
-                    const user = users.find((u: User) => u.email === currentUserEmail);
-                    if (user) {
-                        setEmail(user.email);
-                    }
-                }
+                const session = await getPersistedSession();
+                setEmail(session?.user.email ?? currentUserEmail);
                 const userName = await AsyncStorage.getItem(`userName_${currentUserEmail}`);
                 setName(userName ?? '');
                 const savedProfileImage = await AsyncStorage.getItem(`profileImage_${currentUserEmail}`);
@@ -86,13 +76,11 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
 
     const handleLogout = async () => {
         try {
-            await AsyncStorage.removeItem('currentUser');
-            navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-            });
+            await signOut();
+            resetToLogin();
         } catch (error) {
             console.error('Erro ao fazer logout:', error);
+            Alert.alert('Não foi possível sair', 'Tente novamente.');
         }
     };
 
@@ -101,21 +89,37 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
         { text: 'Sair', style: 'destructive', onPress: () => { void handleLogout(); } },
     ]);
 
+    const resetToLogin = () => {
+        const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
+        if (rootNavigation) rootNavigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        else navigation.navigate('Login');
+    };
+
     const handleDeleteAccount = async () => {
-        if (!email || deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase()) return;
+        if (!email || deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || !deletePasswordConfirmation) return;
         setIsDeletingAccount(true);
         try {
-            await deleteLocalAccountData(email);
+            await deleteAuthenticatedAccount(deletePasswordConfirmation);
             setShowDeleteAccount(false);
-            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+            setDeletePasswordConfirmation('');
+            resetToLogin();
+            Alert.alert('Conta excluída', 'Sua conta e os dados pessoais vinculados foram removidos.');
         } catch (error) {
-            console.error('Erro ao excluir conta:', error);
-            Alert.alert('Não foi possível excluir a conta', 'Tente novamente. Seus dados não foram removidos por completo.');
+            const code = error instanceof Error ? error.message : '';
+            const message = code === 'reauthentication_failed'
+                ? 'A senha não confere. Confira a senha atual e tente novamente. Nada foi excluído.'
+                : code === 'ACCOUNT_DELETION_NOT_DEPLOYED'
+                    ? 'A função de exclusão ainda não foi publicada no Supabase. Nada foi excluído; publique a função delete-account e tente novamente.'
+                    : code === 'server_not_configured'
+                        ? 'A função de exclusão está sem configuração necessária no Supabase. Nada foi excluído.'
+                        : code === 'NO_ACTIVE_SESSION' || code === 'invalid_session' || code === 'unauthorized'
+                            ? 'Sua sessão expirou. Entre novamente e repita a solicitação. Nada foi excluído.'
+            : 'Não foi possível confirmar a exclusão. Verifique sua conexão e tente novamente. Se a sessão já tiver sido encerrada, a conta pode ter sido excluída; tente entrar novamente para confirmar.';
+            Alert.alert('Não foi possível excluir', message);
         } finally {
             setIsDeletingAccount(false);
         }
     };
-
     const handleSaveName = async () => {
         try {
             const currentUserEmail = await AsyncStorage.getItem('currentUser');
@@ -326,18 +330,18 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
                     <Text style={styles.actionText}>Sair</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Excluir conta" style={styles.actionButton} onPress={() => { setDeleteEmailConfirmation(''); setShowDeleteAccount(true); }}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Excluir conta" style={styles.actionButton} onPress={() => { setDeleteEmailConfirmation(''); setDeletePasswordConfirmation(''); setShowDeleteAccount(true); }}>
                     <Ionicons name="trash-outline" size={20} color={COLORS.text.main}/>
                     <Text style={styles.actionText}>Excluir conta</Text>
                 </TouchableOpacity>
             </View>
 
-            <Modal visible={showDeleteAccount} transparent animationType="fade" onRequestClose={() => setShowDeleteAccount(false)}>
+            <Modal visible={showDeleteAccount} transparent animationType="fade" onRequestClose={() => { setShowDeleteAccount(false); setDeletePasswordConfirmation(''); }}>
                 <KeyboardAvoidingView style={styles.deleteBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                     <View style={styles.deleteDialog}>
                         <Ionicons name="warning-outline" size={30} color={COLORS.error} />
                         <Text style={styles.deleteTitle}>Excluir conta?</Text>
-                        <Text style={styles.deleteDescription}>Esta ação é permanente. Seus dados locais, favoritos e progresso de leitura serão apagados. Digite seu e-mail para confirmar.</Text>
+                        <Text style={styles.deleteDescription}>Para excluir sua conta e os dados pessoais vinculados, confirme o e-mail e digite a senha atual. Essa ação é permanente.</Text>
                         <TextInput
                             accessibilityLabel="Digite seu e-mail para confirmar a exclusão"
                             style={styles.deleteInput}
@@ -349,18 +353,29 @@ export function ProfileScreen({navigation: tabNavigation}: Props) {
                             autoCapitalize="none"
                             editable={!isDeletingAccount}
                         />
+                        <TextInput
+                            accessibilityLabel="Digite sua senha atual para confirmar a exclusão"
+                            style={styles.deleteInput}
+                            value={deletePasswordConfirmation}
+                            onChangeText={setDeletePasswordConfirmation}
+                            placeholder="Senha atual"
+                            placeholderTextColor={COLORS.text.muted}
+                            secureTextEntry
+                            autoCapitalize="none"
+                            editable={!isDeletingAccount}
+                        />
                         <View style={styles.deleteActions}>
-                            <TouchableOpacity style={styles.deleteCancel} onPress={() => setShowDeleteAccount(false)} disabled={isDeletingAccount}>
+                            <TouchableOpacity style={styles.deleteCancel} disabled={isDeletingAccount} onPress={() => { setShowDeleteAccount(false); setDeletePasswordConfirmation(''); }}>
                                 <Text style={styles.deleteCancelText}>Cancelar</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 accessibilityRole="button"
                                 accessibilityLabel="Confirmar exclusão permanente da conta"
-                                style={[styles.deleteConfirm, (deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || isDeletingAccount) && styles.deleteConfirmDisabled]}
+                                style={[styles.deleteConfirm, (deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || !deletePasswordConfirmation || isDeletingAccount) && styles.deleteConfirmDisabled]}
                                 onPress={() => { void handleDeleteAccount(); }}
-                                disabled={deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || isDeletingAccount}
+                                disabled={deleteEmailConfirmation.trim().toLowerCase() !== email.toLowerCase() || !deletePasswordConfirmation || isDeletingAccount}
                             >
-                                <Text style={styles.deleteConfirmText}>{isDeletingAccount ? 'Excluindo…' : 'Excluir conta'}</Text>
+                                <Text style={styles.deleteConfirmText}>{isDeletingAccount ? 'Excluindo...' : 'Excluir conta'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

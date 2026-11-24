@@ -7,7 +7,7 @@ import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation
 import { MainTabParamList, RootStackParamList } from '../routes/types';
 import FeedbackToast from '../components/FeedbackToast';
 import {
-    getAnimeKey,
+    getFavoriteKey,
     isAnimeFavorite,
     loadFavoriteKeys,
     toggleFavoriteAnime,
@@ -49,6 +49,23 @@ export const popularManga: MangaItem[] = [
     { id: 'pop-manga-4', title: 'Monster', description: 'Um cirurgião busca redenção após salvar a vida de um psicopata.', image: 'https://cdn.myanimelist.net/images/manga/2/243552l.jpg', genre: 'Mistério, Thriller', year: '1994', rating: '9.1', chapters: '162+', author: 'Urasawa, Naoki' },
     { id: 'pop-manga-5', title: 'Fullmetal Alchemist', description: 'Dois irmãos buscam restaurar seus corpos após uma tentativa falha de alquimia.', image: 'https://cdn.myanimelist.net/images/manga/2/243553l.jpg', genre: 'Ação, Fantasia', year: '2001', rating: '9.0', chapters: '116', author: 'Arakawa, Hiromu' },
 ];
+
+const normalizeCatalogTitle = (title: string) => title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+export function findMangaCatalogItem(title: string): MangaItem | undefined {
+    const normalizedTitle = normalizeCatalogTitle(title);
+    const aliases: Record<string, string> = {
+        'kimetsu no yaiba': 'demon slayer',
+    };
+    const targetTitle = aliases[normalizedTitle] ?? normalizedTitle;
+    return [...trendingManga, ...newReleasesManga, ...popularManga]
+        .find((item) => normalizeCatalogTitle(item.title) === targetTitle);
+}
 
 type Props = {
     navigation?: NavigationProp<MainTabParamList>;
@@ -101,7 +118,7 @@ export default function MangasScreen({ navigation: tabNavigation }: Props) {
             setFavoriteFeedback(isFavorite ? 'Mangá adicionado aos favoritos' : 'Mangá removido dos favoritos');
             setFavoriteKeys((prev) => {
                 const next = new Set(prev);
-                const key = getAnimeKey(manga.title);
+                const key = getFavoriteKey(manga.title, 'manga');
                 if (isFavorite) next.add(key);
                 else next.delete(key);
                 return next;
@@ -150,9 +167,9 @@ export default function MangasScreen({ navigation: tabNavigation }: Props) {
                     onPress={() => toggleFavorite(item)}
                 >
                     <Ionicons 
-                        name={isAnimeFavorite(favoriteKeys, item.title) ? "star" : "star-outline"} 
+                        name={isAnimeFavorite(favoriteKeys, item.title, 'manga') ? "star" : "star-outline"}
                         size={16} 
-                        color={isAnimeFavorite(favoriteKeys, item.title) ? COLORS.primary : COLORS.text.main} 
+                        color={isAnimeFavorite(favoriteKeys, item.title, 'manga') ? COLORS.primary : COLORS.text.main}
                     />
                 </TouchableOpacity>
             </View>

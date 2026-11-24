@@ -5,11 +5,12 @@ import { COLORS } from '../theme/colors';
 import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, MainTabParamList } from '../routes/types';
 import FeedbackToast from '../components/FeedbackToast';
+import { findMangaCatalogItem } from './MangasScreen';
 import {
     FavoriteAnime,
     loadFavoriteAnimeList,
     toggleFavoriteAnime,
-    getAnimeKey,
+    getFavoriteKey,
 } from '../utils/favorites';
 
 type Props = {
@@ -58,16 +59,18 @@ export default function FavoritesScreen({ navigation: tabNavigation }: Props) {
                 activeOpacity={0.85}
                 onPress={() => {
                     if (item.type === 'manga') {
+                        const catalogItem = findMangaCatalogItem(item.title);
                         navigation.navigate('MangaDetail', {
                             manga: {
-                                id: item.id,
+                                id: catalogItem?.id ?? item.id,
                                 title: item.title,
-                                image: item.image,
-                                rating: item.rating,
-                                year: item.year,
-                                genre: item.genre,
-                                chapters: item.chapters,
-                                description: item.description,
+                                image: catalogItem?.image ?? item.image,
+                                rating: catalogItem?.rating ?? item.rating,
+                                year: catalogItem?.year ?? item.year,
+                                genre: catalogItem?.genre ?? item.genre,
+                                chapters: catalogItem?.chapters ?? item.chapters,
+                                author: catalogItem?.author,
+                                description: catalogItem?.description ?? item.description,
                             },
                         });
                         return;
@@ -134,7 +137,7 @@ export default function FavoritesScreen({ navigation: tabNavigation }: Props) {
             ) : (
                 <FlatList
                     data={filteredFavorites}
-                    keyExtractor={(item) => getAnimeKey(item.title) || item.id}
+                    keyExtractor={(item) => getFavoriteKey(item.title, item.type === 'manga' ? 'manga' : 'anime') || item.id}
                     renderItem={renderFavorite}
                     numColumns={2}
                     contentContainerStyle={styles.list}

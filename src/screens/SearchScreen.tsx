@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Image, StyleSheet, Dimensions, Linking, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Dimensions, Linking, Alert } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MainTabParamList, RootStackParamList } from '../routes/types';
@@ -34,7 +35,7 @@ type MangaItem = {
 const mangaCatalog: MangaItem[] = [...trendingManga, ...newReleasesManga, ...popularManga]
     .filter((manga, index, all) => all.findIndex((candidate) => candidate.title === manga.title) === index);
 
-const ANIME_CATEGORIES = [
+const ANIME_CATEGORY_SEEDS = [
     { id: '1', name: 'Ação', color: '#455A64', image: 'https://cdn.myanimelist.net/images/anime/1171/109222.jpg', animeList: [
         { id: '1', title: 'Jujutsu Kaisen', image: 'https://animesonline.cloud/wp-content/uploads/2026/01/zKFkzRn1UyE11Jv9CJjVmvmQFvR-200x300.jpg', genre: 'Ação', year: '2020', rating: '9.1', episodes: '24', aliases: ['呪術廻戦', 'jujutsu kaisen', 'feitiçaria'] },
         { id: '2', title: 'Chainsaw Man', image: 'https://animesonline.cloud/wp-content/uploads/2023/12/oeNps5WE8umMVcNISI8M2NHk7jg-200x300.jpg', genre: 'Ação', year: '2022', rating: '8.9', episodes: '12', aliases: ['チェンソーマン', 'homem motosserra', 'chainsawman'] },
@@ -87,6 +88,56 @@ const ANIME_CATEGORIES = [
         { id: '2', title: 'Vinland Saga', image: 'https://animesonline.cloud/wp-content/uploads/2025/07/Vinland-Saga.jpg', genre: 'Ação', year: '2019', rating: '8.9', episodes: '48', aliases: ['ヴィンランド・サガ', 'vinland saga', 'saga de vinland'] },
     ] as AnimeItem[]},
 ];
+
+const normalizeGenreName = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const ANIME_GENRE_MEMBERSHIPS: Record<string, string[]> = {
+    'one piece': ['Aventura', 'Ação', 'Fantasia', 'Shounen'],
+    'hunter x hunter': ['Aventura', 'Ação', 'Fantasia', 'Shounen'],
+    'dr. stone': ['Aventura', 'Sci-Fi', 'Comédia', 'Shounen'],
+    'jujutsu kaisen': ['Ação', 'Fantasia', 'Shounen'],
+    'chainsaw man': ['Ação', 'Fantasia', 'Shounen'],
+    'demon slayer': ['Ação', 'Fantasia', 'Aventura', 'Shounen'],
+    'attack on titan': ['Ação', 'Fantasia', 'Drama', 'Shounen'],
+    'my hero academia': ['Ação', 'Fantasia', 'Comédia', 'Shounen'],
+    'spy x family': ['Comédia', 'Ação', 'Slice of Life'],
+    'kaguya-sama': ['Comédia', 'Romance', 'Slice of Life'],
+    'violet evergarden': ['Drama', 'Slice of Life'],
+    'your name': ['Drama', 'Romance', 'Fantasia'],
+    'tensei shitara slime datta ken': ['Fantasia', 'Aventura', 'Comédia', 'Isekai', 'Ação', 'Shounen'],
+    'mushoku tensei': ['Fantasia', 'Aventura', 'Isekai', 'Drama', 'Seinen'],
+    're:zero': ['Fantasia', 'Isekai', 'Drama', 'Romance'],
+    'naruto shippuden': ['Shounen', 'Ação', 'Aventura', 'Fantasia'],
+    'dragon ball z': ['Shounen', 'Ação', 'Aventura', 'Sci-Fi'],
+    'black clover': ['Shounen', 'Ação', 'Fantasia'],
+    'bleach': ['Shounen', 'Ação', 'Fantasia'],
+    'horimiya': ['Slice of Life', 'Romance', 'Comédia'],
+    'k-on!': ['Slice of Life', 'Comédia'],
+    'steins;gate': ['Sci-Fi', 'Drama'],
+    'psycho-pass': ['Sci-Fi', 'Ação', 'Drama'],
+    'toradora!': ['Romance', 'Comédia', 'Slice of Life'],
+    'clannad': ['Romance', 'Drama', 'Slice of Life'],
+    'overlord': ['Isekai', 'Fantasia', 'Ação'],
+    'berserk': ['Seinen', 'Ação', 'Fantasia', 'Drama'],
+    'vinland saga': ['Seinen', 'Ação', 'Aventura', 'Drama'],
+};
+
+const animeCatalog = [...new Map(
+    ANIME_CATEGORY_SEEDS.flatMap((category) => category.animeList)
+        .map((anime) => [normalizeGenreName(anime.title), anime] as const)
+).values()];
+
+const ANIME_CATEGORIES = ANIME_CATEGORY_SEEDS.map((category) => ({
+    ...category,
+    animeList: animeCatalog
+        .filter((anime) => (ANIME_GENRE_MEMBERSHIPS[normalizeGenreName(anime.title)] ?? anime.genre.split(',').map(normalizeGenreName))
+            .some((genre) => normalizeGenreName(genre) === normalizeGenreName(category.name)))
+        .map((anime) => ({
+            ...anime,
+            id: `anime-${normalizeGenreName(anime.title).replace(/[^a-z0-9]+/g, '-')}`,
+            genre: (ANIME_GENRE_MEMBERSHIPS[normalizeGenreName(anime.title)] ?? anime.genre.split(',').map((genre) => genre.trim())).join(', '),
+        })),
+}));
 
 const MANGA_CATEGORIES = [
     { id: '1', name: 'Shounen', color: '#1565C0', image: 'https://cdn.myanimelist.net/images/anime/6/73245.jpg', animeList: [
@@ -284,7 +335,7 @@ export default function SearchScreen({ navigation: tabNavigation }: Props) {
                     : navigation.navigate('CategoryScreen', { title: item.name, mangaList: categoryManga.length ? categoryManga : mangaCatalog })}
             >
                 <Text style={styles.cardTitle}>{item.name}</Text>
-                <Image source={{ uri: cardImage }} style={styles.cardImage} />
+                <Image source={{ uri: cardImage }} style={styles.cardImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
             </TouchableOpacity>
         );
     };
@@ -307,8 +358,8 @@ export default function SearchScreen({ navigation: tabNavigation }: Props) {
                 }
             })}
         >
-            <Image source={{ uri: activeTab !== 'Animes' ? (mangaCoverArtwork[item.title] || item.image) : getOriginalImageUrl(item.image) }} style={styles.animePoster} />
-            {isAnimeFavorite(favoriteKeys, item.title) && (
+            <Image source={{ uri: activeTab !== 'Animes' ? (mangaCoverArtwork[item.title] || item.image) : getOriginalImageUrl(item.image) }} style={styles.animePoster} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+            {isAnimeFavorite(favoriteKeys, item.title, activeTab === 'Animes' ? 'anime' : 'manga') && (
                 <View style={styles.favoriteBadge}>
                     <Ionicons name="star" size={14} color={COLORS.primary} />
                 </View>

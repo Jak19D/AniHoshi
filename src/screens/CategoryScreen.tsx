@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList, AnimeItem, MangaDetailParams } from '../routes/types';
 import { COLORS } from '../theme/colors';
 import { isAnimeFavorite, loadFavoriteKeys } from '../utils/favorites';
-import { getOriginalImageUrl } from '../utils/imageUrl';
-import { getMangaCover } from '../services/animeArtwork';
+import { getAnimeArtwork, getMangaCover } from '../services/animeArtwork';
 
 type Props = {
     route: RouteProp<RootStackParamList, 'CategoryScreen'>;
@@ -20,6 +20,24 @@ export default function CategoryScreen({ route }: Props) {
     const mangaMode = !!mangaList;
     const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
     const [mangaCovers, setMangaCovers] = useState<Record<string, string>>({});
+    const [animeCovers, setAnimeCovers] = useState<Record<string, string>>({});
+    const [failedAnimeArtwork, setFailedAnimeArtwork] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        if (mangaMode || !animeList.length) return;
+        let active = true;
+        void Promise.all(animeList.map(async (anime) => {
+            const artwork = await getAnimeArtwork(anime.title);
+            return [anime.title, artwork?.coverImage] as const;
+        })).then((artworks) => {
+            if (!active) return;
+            setAnimeCovers((current) => ({
+                ...current,
+                ...Object.fromEntries(artworks.filter((entry): entry is readonly [string, string] => Boolean(entry[1]))),
+            }));
+        });
+        return () => { active = false; };
+    }, [animeList, mangaMode]);
 
     useEffect(() => {
         if (!mangaMode || !mangaList) return;
@@ -50,14 +68,19 @@ export default function CategoryScreen({ route }: Props) {
         }, [refreshFavorites])
     );
 
-    const renderAnimeCard = ({ item }: { item: AnimeItem | MangaDetailParams }) => (
+    const renderAnimeCard = ({ item }: { item: AnimeItem | MangaDetailParams }) => {
+        const genreBadge = item.genre?.split(',').map((genre) => genre.trim()).find((genre) =>
+            genre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+        ) ?? item.genre?.split(',')[0].trim();
+
+        return (
         <TouchableOpacity 
             style={styles.card}
             onPress={() => mangaMode ? navigation.navigate('MangaDetail', { manga: { ...(item as MangaDetailParams), image: mangaCovers[item.title] || item.image } }) : navigation.navigate('AnimeDetail', { 
                 anime: {
                     id: item.id,
                     title: item.title,
-                    image: getOriginalImageUrl(item.image),
+                    image: failedAnimeArtwork[item.title] ? item.image : animeCovers[item.title] || item.image,
                     rating: item.rating,
                     year: item.year,
                     genre: item.genre,
@@ -67,13 +90,24 @@ export default function CategoryScreen({ route }: Props) {
             })}
         >
             <View style={styles.cardImageContainer}>
-                <Image source={{ uri: mangaMode ? (mangaCovers[item.title] || item.image) : getOriginalImageUrl(item.image) }} style={styles.poster} resizeMode="contain" />
+                <Image
+                    source={{ uri: mangaMode ? (mangaCovers[item.title] || item.image) : (failedAnimeArtwork[item.title] ? item.image : animeCovers[item.title] || item.image) }}
+                    style={styles.poster}
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                    transition={150}
+                    onError={() => {
+                        if (!mangaMode && animeCovers[item.title] && !failedAnimeArtwork[item.title]) {
+                            setFailedAnimeArtwork((current) => ({ ...current, [item.title]: true }));
+                        }
+                    }}
+                />
                 {item.genre && (
                     <View style={styles.genreBadge}>
-                        <Text style={styles.genreText}>{item.genre}</Text>
+                        <Text style={styles.genreText}>{genreBadge}</Text>
                     </View>
                 )}
-                {isAnimeFavorite(favoriteKeys, item.title) && (
+                {isAnimeFavorite(favoriteKeys, item.title, mangaMode ? 'manga' : 'anime') && (
                     <View style={styles.favoriteBadge}>
                         <Ionicons name="star" size={16} color={COLORS.primary} />
                     </View>
@@ -90,7 +124,8 @@ export default function CategoryScreen({ route }: Props) {
                 )}
             </View>
         </TouchableOpacity>
-    );
+        );
+    };
 
     return (
         <View style={styles.container}>

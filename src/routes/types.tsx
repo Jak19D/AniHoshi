@@ -1,7 +1,7 @@
 export type RootStackParamList = {
     Login: undefined;
     Register: undefined;
-    ResetPassword: { email: string };
+    ResetPassword: { email?: string; code?: string };
     DesignSystem: undefined;
     SplashLogin: undefined;
     Main: undefined;
@@ -66,11 +66,13 @@ export type MangaDetailParams = {
 export type Season = {
     id: string;
     name: string;
+    seasonNumber?: number;
     episodes: Episode[];
 };
 
 export type Episode = {
     id: string;
+    seasonNumber?: number;
     title: string;
     thumbnail?: string;
     duration?: string;

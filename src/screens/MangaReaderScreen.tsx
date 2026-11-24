@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+import Pdf from 'react-native-pdf';
 import { RootStackParamList, MangaChapter } from '../routes/types';
 import { COLORS } from '../theme/colors';
 import { mediaRepository } from '../services/mediaRepository';
@@ -95,17 +95,15 @@ export default function MangaReaderScreen({ route, navigation }: Props) {
                     ) : (
                         <FlatList horizontal pagingEnabled inverted={mode === 'manga'} data={chapter.pages} keyExtractor={(_, index) => `${chapter.id}-page-${index}`} renderItem={renderPage} />
                     )
-                ) : pdfUrl ? (
-                    <WebView
+                ) : pdfUrl && !pdfError ? (
+                    <Pdf
                         key={`${chapter.id}-${pdfUrl}`}
-                        source={{ uri: pdfUrl }}
+                        source={{ uri: pdfUrl, cache: true }}
                         style={styles.pdfView}
-                        originWhitelist={['https://*', 'http://*']}
-                        startInLoadingState
                         onError={() => setPdfError(true)}
-                        renderLoading={() => <View style={styles.readerMessage}><ActivityIndicator color={COLORS.primary} /><Text style={styles.readerMessageText}>Carregando capítulo…</Text></View>}
-                    />
-                ) : (
+                        enablePaging={false}
+                        trustAllCerts={false}
+                    />                ) : (
                     <View style={styles.readerMessage}>
                         {loading ? <ActivityIndicator color={COLORS.primary} /> : <Ionicons name="book-outline" size={52} color={COLORS.primary} />}
                         <Text style={styles.readerMessageTitle}>{loading ? 'Carregando capítulo…' : 'Capítulo indisponível no momento'}</Text>

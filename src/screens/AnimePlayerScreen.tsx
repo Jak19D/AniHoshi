@@ -19,7 +19,6 @@ export default function AnimePlayerScreen({ route, navigation }: Props) {
     const [loading, setLoading] = useState(true);
     const [showOptions, setShowOptions] = useState(false);
     const [playerError, setPlayerError] = useState<string | null>(null);
-
     useEffect(() => {
         let active = true;
         setLoading(true);
@@ -29,17 +28,17 @@ export default function AnimePlayerScreen({ route, navigation }: Props) {
             setLoading(false);
             return () => { active = false; };
         }
-        mediaRepository.resolve(reference).then((url) => {
+        mediaRepository.resolve(reference).then(async (url) => {
             if (!active) return;
             setVideoUrl(url);
-            if (url) player.replace(url);
+            if (url) await player.replaceAsync(url);
             setLoading(false);
         }).catch(() => {
             if (!active) return;
             setPlayerError('Não foi possível carregar este episódio.');
             setLoading(false);
         });
-        return () => { active = false; player.pause(); };
+        return () => { active = false; };
     }, [episode.asset, episode.videoUrl, player]);
 
     useEffect(() => {

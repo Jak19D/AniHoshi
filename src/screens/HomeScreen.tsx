@@ -7,7 +7,7 @@ import { COLORS } from '../theme/colors';
 import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MainTabParamList, RootStackParamList } from '../routes/types';
 import {
-    getAnimeKey,
+    getFavoriteKey,
     isAnimeFavorite,
     loadFavoriteKeys,
     toggleFavoriteAnime,
@@ -130,7 +130,7 @@ export default function HomeScreen({ navigation: tabNavigation }: Props) {
             setFavoriteFeedback(isFavorite ? 'Anime adicionado aos favoritos' : 'Anime removido dos favoritos');
             setFavoriteKeys((prev) => {
                 const next = new Set(prev);
-                const key = getAnimeKey(anime.title);
+                const key = getFavoriteKey(anime.title, 'anime');
                 if (isFavorite) next.add(key);
                 else next.delete(key);
                 return next;

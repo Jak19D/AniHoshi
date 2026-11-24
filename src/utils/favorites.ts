@@ -24,6 +24,11 @@ export const getAnimeKey = (title: string) =>
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]/g, '');
 
+export type FavoriteContentType = 'anime' | 'manga';
+
+export const getFavoriteKey = (title: string, type: FavoriteContentType = 'anime') =>
+    `${type}:${getAnimeKey(title)}`;
+
 export async function getCurrentUserEmail(): Promise<string | null> {
     return AsyncStorage.getItem('currentUser');
 }
@@ -52,19 +57,21 @@ export async function loadFavoriteAnimeList(): Promise<FavoriteAnime[]> {
     const byKey = new Map<string, FavoriteAnime>();
 
     for (const anime of allAnime) {
-        const key = getAnimeKey(anime.title);
-        if (!key) continue;
+        const titleKey = getAnimeKey(anime.title);
+        if (!titleKey) continue;
+        const type = anime.type === 'manga' ? 'manga' : 'anime';
+        const key = getFavoriteKey(anime.title, type);
 
         const isListed =
             favIds.includes(anime.id) ||
             favIds.includes(key) ||
-            favIds.some((id) => getAnimeKey(id) === key);
+            favIds.includes(titleKey);
 
         if (isListed) {
             byKey.set(key, {
                 ...anime,
                 id: key,
-                type: anime.type || 'anime',
+                type,
             });
         }
     }
@@ -74,11 +81,15 @@ export async function loadFavoriteAnimeList(): Promise<FavoriteAnime[]> {
 
 export async function loadFavoriteKeys(): Promise<Set<string>> {
     const list = await loadFavoriteAnimeList();
-    return new Set(list.map((a) => getAnimeKey(a.title)));
+    return new Set(list.map((a) => getFavoriteKey(a.title, a.type === 'manga' ? 'manga' : 'anime')));
 }
 
-export function isAnimeFavorite(favoriteKeys: Set<string>, title: string): boolean {
-    return favoriteKeys.has(getAnimeKey(title));
+export function isAnimeFavorite(
+    favoriteKeys: Set<string>,
+    title: string,
+    type: FavoriteContentType = 'anime',
+): boolean {
+    return favoriteKeys.has(getFavoriteKey(title, type));
 }
 
 export async function toggleFavoriteAnime(
@@ -89,19 +100,20 @@ export async function toggleFavoriteAnime(
         throw new Error('NOT_LOGGED_IN');
     }
 
-    const key = getAnimeKey(anime.title);
+    const type = anime.type === 'manga' ? 'manga' : 'anime';
+    const key = getFavoriteKey(anime.title, type);
     let favorites = await loadFavoriteAnimeList();
-    const alreadyFavorite = favorites.some((a) => getAnimeKey(a.title) === key);
+    const alreadyFavorite = favorites.some((a) => getFavoriteKey(a.title, a.type === 'manga' ? 'manga' : 'anime') === key);
 
     if (alreadyFavorite) {
-        favorites = favorites.filter((a) => getAnimeKey(a.title) !== key);
+        favorites = favorites.filter((a) => getFavoriteKey(a.title, a.type === 'manga' ? 'manga' : 'anime') !== key);
     } else {
         favorites = [
-            ...favorites.filter((a) => getAnimeKey(a.title) !== key),
+            ...favorites.filter((a) => getFavoriteKey(a.title, a.type === 'manga' ? 'manga' : 'anime') !== key),
             {
                 ...anime,
                 id: key || anime.id,
-                type: anime.type || 'anime',
+                type,
             },
         ];
     }

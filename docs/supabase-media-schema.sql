@@ -1,5 +1,7 @@
--- AniHoshi media catalog. Execute from the Supabase SQL editor after creating
--- the project. Public read access is intentional for catalog metadata only.
+-- LEGACY REFERENCE ONLY. Do not run this file separately.
+-- The versioned source of truth is supabase/migrations/20261122000100_catalog.sql
+-- and supabase/migrations/20261122000102_rls_storage.sql. Those migrations
+-- preserve private Storage access and require authentication to read media rows.
 
 create table if not exists public.anime_episodes (
   id text primary key,

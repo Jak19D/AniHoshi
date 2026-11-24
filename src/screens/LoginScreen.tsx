@@ -1,28 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, ScrollView } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../routes/types';
 import { COLORS } from '../theme/colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import SHA256 from 'crypto-js/sha256';
 import { Ionicons } from '@expo/vector-icons';
+import { getAuthErrorMessage, signInWithEmail } from '../services/authService';
+import LegalConsent from '../components/LegalConsent';
 
 type LoginFormData = {
     email: string;
     password: string;
 };
-
-type User = {
-    email: string;
-    password: string;
-};
-
-const PASSWORD_SALT = 'anihoshi.local.v1';
-const hashPassword = (password: string) => SHA256(`${PASSWORD_SALT}:${password}`).toString();
-const legacyHashPassword = (password: string) => SHA256(password).toString();
 
 const loginSchema = z.object({
     email: z.string().email('E-mail inválido'),
@@ -40,48 +31,23 @@ export default function LoginScreen({ navigation }: Props) {
     });
     const email = watch('email');
     const [showPassword, setShowPassword] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [legalAccepted, setLegalAccepted] = useState(false);
 
     const handleLogin = async (data: LoginFormData) => {
+        setIsSubmitting(true);
         try {
-            const existingUsers = await AsyncStorage.getItem('users');
-            let users: User[] = [];
-            if (existingUsers) {
-                try {
-                    users = JSON.parse(existingUsers);
-                } catch (parseError) {
-                    console.error('Erro ao fazer parse dos usuários:', parseError);
-                    Alert.alert('Erro', 'Dados corrompidos. Por favor, registre-se novamente.');
-                    return;
-                }
-            }
-
-            const email = data.email.toLowerCase();
-            const hashedPassword = hashPassword(data.password);
-            const legacyHash = legacyHashPassword(data.password);
-
-            const userIndex = users.findIndex((u: User) => {
-                if (u.email !== email) return false;
-                return u.password === hashedPassword || u.password === legacyHash;
-            });
-
-            if (userIndex >= 0) {
-                const user = users[userIndex];
-                if (user.password === legacyHash && user.password !== hashedPassword) {
-                    users[userIndex] = { ...user, password: hashedPassword };
-                    await AsyncStorage.setItem('users', JSON.stringify(users));
-                }
-                await AsyncStorage.setItem('currentUser', user.email);
-                navigation.replace('SplashLogin');
-            } else {
-                Alert.alert('Erro', 'E-mail ou senha incorretos');
-            }
+            await signInWithEmail(data.email, data.password);
+            navigation.replace('SplashLogin');
         } catch (error) {
-            Alert.alert('Erro', 'Não foi possível fazer login');
+            Alert.alert('Não foi possível entrar', getAuthErrorMessage(error));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
-        <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
             <Image source={require('../../assets/logo2.png')} style={styles.logo} resizeMode="contain" />
             <View style={styles.appNameContainer}>
                 <Text style={styles.appNameAni}>Ani</Text>
@@ -118,8 +84,10 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.passwordHint}>A senha deve ter no mínimo 6 caracteres.</Text>
             {errors.password && <Text style={styles.error}>{String(errors.password.message)}</Text>}
 
-            <TouchableOpacity disabled={!isValid} style={[styles.button, !isValid && styles.buttonDisabled]} onPress={handleSubmit(handleLogin)}>
-                <Text style={styles.buttonText}>Entrar</Text>
+            <LegalConsent accepted={legalAccepted} onAcceptedChange={setLegalAccepted} />
+
+            <TouchableOpacity disabled={!isValid || !legalAccepted || isSubmitting} style={[styles.button, (!isValid || !legalAccepted || isSubmitting) && styles.buttonDisabled]} onPress={handleSubmit(handleLogin)}>
+                <Text style={styles.buttonText}>{isSubmitting ? 'Entrando...' : 'Entrar'}</Text>
             </TouchableOpacity>
 
             <View style={styles.linksRow}>
@@ -131,13 +99,13 @@ export default function LoginScreen({ navigation }: Props) {
                     <Text style={styles.link}>Cadastre-se</Text>
                 </TouchableOpacity>
             </View>
-        </View>
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
+        flexGrow: 1,
         backgroundColor: COLORS.background.primary,
         padding: 20,
         justifyContent: 'center'

@@ -138,9 +138,9 @@ function MainTabs() {
     );
 }
 
-export default function AppNavigator() {
+export default function AppNavigator({ initialRouteName = 'Login' }: { initialRouteName?: keyof RootStackParamList }) {
     return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />

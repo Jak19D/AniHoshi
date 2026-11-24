@@ -1,17 +1,15 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import SHA256 from 'crypto-js/sha256';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { COLORS } from '../theme/colors';
 import { RootStackParamList } from '../routes/types';
+import { exchangePasswordRecoveryCode, getAuthErrorMessage, requestPasswordReset, signOut, updatePassword, verifyPasswordRecoveryCode } from '../services/authService';
 
-type FormData = { email: string; password: string; confirmPassword: string };
-type User = { email: string; password: string };
+type FormData = { email: string; recoveryCode?: string; password?: string; confirmPassword?: string };
 type Props = {
     navigation: NativeStackNavigationProp<RootStackParamList, 'ResetPassword'>;
     route: RouteProp<RootStackParamList, 'ResetPassword'>;
@@ -19,67 +17,89 @@ type Props = {
 
 const resetSchema = z.object({
     email: z.string().email('Digite um e-mail válido'),
-    password: z.string()
-        .min(6, 'Use no mínimo 6 caracteres')
-        .regex(/[A-Z]/, 'Inclua pelo menos uma letra maiúscula')
-        .regex(/[0-9]/, 'Inclua pelo menos um número'),
-    confirmPassword: z.string().min(1, 'Confirme sua nova senha'),
-}).refine((data) => data.password === data.confirmPassword, {
-    message: 'As senhas não coincidem',
-    path: ['confirmPassword'],
+    recoveryCode: z.string().optional(),
+    password: z.string().optional(),
+    confirmPassword: z.string().optional(),
 });
 
-const PASSWORD_SALT = 'anihoshi.local.v1';
-
 export default function ResetPasswordScreen({ navigation, route }: Props) {
-    const { control, handleSubmit, formState: { errors, isValid, dirtyFields } } = useForm<FormData>({
+    const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+    const [emailSent, setEmailSent] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { control, handleSubmit, setError, setValue, formState: { errors, isValid } } = useForm<FormData>({
         resolver: zodResolver(resetSchema),
         mode: 'onChange',
-        defaultValues: { email: route.params.email, password: '', confirmPassword: '' },
+        defaultValues: { email: route.params?.email ?? '', recoveryCode: '', password: '', confirmPassword: '' },
     });
 
-    const handleResetPassword = async ({ email, password }: FormData) => {
-        try {
-            const storedUsers = await AsyncStorage.getItem('users');
-            const users: User[] = storedUsers ? JSON.parse(storedUsers) : [];
-            const normalizedEmail = email.trim().toLowerCase();
-            const userIndex = users.findIndex((user) => user.email === normalizedEmail);
+    useEffect(() => {
+        const code = route.params?.code;
+        if (!code) return;
+        let mounted = true;
+        setIsSubmitting(true);
+        void exchangePasswordRecoveryCode(code)
+            .then(({ user }) => {
+                if (!mounted) return;
+                if (user.email) setValue('email', user.email);
+                setIsRecoveryMode(true);
+            })
+            .catch((error) => {
+                if (mounted) Alert.alert('Link inválido ou expirado', getAuthErrorMessage(error));
+            })
+            .finally(() => { if (mounted) setIsSubmitting(false); });
+        return () => { mounted = false; };
+    }, [route.params?.code, setValue]);
 
-            if (userIndex === -1) {
-                Alert.alert('E-mail não encontrado', 'Confira o e-mail informado ou crie uma conta.');
+    const handleReset = async ({ email, recoveryCode, password, confirmPassword }: FormData) => {
+        setIsSubmitting(true);
+        try {
+            if (!isRecoveryMode && !emailSent) {
+                await requestPasswordReset(email);
+                setEmailSent(true);
+                Alert.alert('E-mail enviado', 'Confira a caixa de entrada e o spam. Digite o código de 8 dígitos ou cole o link do e-mail para continuar.');
                 return;
             }
 
-            Alert.alert('Confirmar alteração', `A senha da conta ${normalizedEmail} será alterada. Deseja continuar?`, [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Alterar senha',
-                    onPress: () => {
-                        void (async () => {
-                            users[userIndex] = {
-                                ...users[userIndex],
-                                password: SHA256(`${PASSWORD_SALT}:${password}`).toString(),
-                            };
-                            await AsyncStorage.setItem('users', JSON.stringify(users));
-                            Alert.alert('Senha redefinida', 'Sua senha foi alterada. Entre com a nova senha.');
-                            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-                        })().catch((error) => {
-                            console.error('Erro ao redefinir senha:', error);
-                            Alert.alert('Erro', 'Não foi possível redefinir sua senha. Tente novamente.');
-                        });
-                    },
-                },
-            ]);
+            if (!isRecoveryMode) {
+                if (!recoveryCode?.trim()) {
+                    setError('recoveryCode', { message: 'Digite o código de 8 dígitos ou cole o link do e-mail.' });
+                    return;
+                }
+                await verifyPasswordRecoveryCode(email, recoveryCode);
+                setIsRecoveryMode(true);
+                Alert.alert('Código confirmado', 'Agora escolha sua nova senha.');
+                return;
+            }
+
+            if (!password || password.length < 6 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+                setError('password', { message: 'Use 6 ou mais caracteres, uma letra maiúscula e um número.' });
+                return;
+            }
+            if (password !== confirmPassword) {
+                setError('confirmPassword', { message: 'As senhas não coincidem.' });
+                return;
+            }
+
+            await updatePassword(password);
+            await signOut('local');
+            Alert.alert('Senha redefinida', 'Sua senha foi alterada com sucesso.');
+            navigation.replace('Login');
         } catch (error) {
-            console.error('Erro ao redefinir senha:', error);
-            Alert.alert('Erro', 'Não foi possível redefinir sua senha. Tente novamente.');
+            Alert.alert('Não foi possível continuar', getAuthErrorMessage(error));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
         <View style={styles.container}>
             <Image source={require('../../assets/logo2.png')} style={styles.logo} resizeMode="contain" />
-            <Text style={styles.title}>Redefinir senha</Text>
+            <Text style={styles.title}>{isRecoveryMode ? 'Escolha uma nova senha' : emailSent ? 'Confirme seu e-mail' : 'Redefinir senha'}</Text>
+            <Text style={styles.description}>{isRecoveryMode
+                ? 'Defina uma senha nova para sua conta.'
+                : emailSent
+                    ? 'Enviamos um e-mail de recuperação. Digite o código de 8 dígitos ou cole o link completo abaixo.'
+                    : 'Enviaremos um código de recuperação para o e-mail da sua conta.'}</Text>
 
             <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
                 <TextInput
@@ -88,42 +108,41 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
                     placeholderTextColor={COLORS.text.muted}
                     keyboardType="email-address"
                     autoCapitalize="none"
+                    editable={!isRecoveryMode && !emailSent}
                     value={value}
                     onChangeText={(text) => onChange(text.toLowerCase())}
                 />
             )} />
             {errors.email && <Text style={styles.error}>{errors.email.message}</Text>}
 
-            <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
-                <TextInput
-                    style={styles.input}
-                    placeholder="Digite sua nova senha"
-                    placeholderTextColor={COLORS.text.muted}
-                    secureTextEntry
-                    value={value}
-                    onChangeText={onChange}
-                />
-            )} />
-            {dirtyFields.password && errors.password && <Text style={styles.error}>{errors.password.message}</Text>}
+            {emailSent && !isRecoveryMode && <>
+                <Controller control={control} name="recoveryCode" render={({ field: { onChange, value } }) => (
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Código ou link do e-mail"
+                        placeholderTextColor={COLORS.text.muted}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        value={value}
+                        onChangeText={onChange}
+                    />
+                )} />
+                {errors.recoveryCode && <Text style={styles.error}>{errors.recoveryCode.message}</Text>}
+            </>}
 
-            <Controller control={control} name="confirmPassword" render={({ field: { onChange, value } }) => (
-                <TextInput
-                    style={styles.input}
-                    placeholder="Confirme sua nova senha"
-                    placeholderTextColor={COLORS.text.muted}
-                    secureTextEntry
-                    value={value}
-                    onChangeText={onChange}
-                />
-            )} />
-            {dirtyFields.confirmPassword && errors.confirmPassword && <Text style={styles.error}>{errors.confirmPassword.message}</Text>}
+            {isRecoveryMode && <>
+                <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
+                    <TextInput style={styles.input} placeholder="Digite sua nova senha" placeholderTextColor={COLORS.text.muted} secureTextEntry value={value} onChangeText={onChange} />
+                )} />
+                {errors.password && <Text style={styles.error}>{errors.password.message}</Text>}
+                <Controller control={control} name="confirmPassword" render={({ field: { onChange, value } }) => (
+                    <TextInput style={styles.input} placeholder="Confirme sua nova senha" placeholderTextColor={COLORS.text.muted} secureTextEntry value={value} onChangeText={onChange} />
+                )} />
+                {errors.confirmPassword && <Text style={styles.error}>{errors.confirmPassword.message}</Text>}
+            </>}
 
-            <TouchableOpacity
-                disabled={!isValid}
-                style={[styles.button, !isValid && styles.buttonDisabled]}
-                onPress={handleSubmit(handleResetPassword)}
-            >
-                <Text style={styles.buttonText}>Redefinir senha</Text>
+            <TouchableOpacity disabled={!isValid || isSubmitting} style={[styles.button, (!isValid || isSubmitting) && styles.buttonDisabled]} onPress={handleSubmit(handleReset)}>
+                <Text style={styles.buttonText}>{isSubmitting ? 'Aguarde...' : isRecoveryMode ? 'Redefinir senha' : emailSent ? 'Validar código' : 'Enviar código'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -136,7 +155,8 @@ export default function ResetPasswordScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background.primary, padding: 20, justifyContent: 'center' },
     logo: { width: 280, height: 100, alignSelf: 'center', marginBottom: 20 },
-    title: { color: COLORS.text.main, fontSize: 26, fontWeight: 'bold', marginBottom: 24 },
+    title: { color: COLORS.text.main, fontSize: 26, fontWeight: 'bold', marginBottom: 12 },
+    description: { color: COLORS.text.muted, fontSize: 14, marginBottom: 16 },
     input: { backgroundColor: COLORS.surface.primary, color: COLORS.text.main, padding: 15, borderRadius: 25, marginBottom: 12 },
     button: { backgroundColor: COLORS.primary, padding: 15, borderRadius: 25, alignItems: 'center', marginTop: 8 },
     buttonDisabled: { opacity: 0.4 },
